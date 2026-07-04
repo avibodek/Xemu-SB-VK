@@ -343,3 +343,11 @@ void xemu_settings_reset_keyboard_mapping(void)
   cnode->reset_to_defaults();
   cnode->store_to_struct(&g_config);
 }
+
+void xemu_settings_reset_sbc_keyboard_mapping(void)
+{
+  auto cnode = config_tree.child("input")->child("keyboard_sbc_scancode_map");
+  cnode->update_from_struct(&g_config);
+  cnode->reset_to_defaults();
+  cnode->store_to_struct(&g_config);
+}

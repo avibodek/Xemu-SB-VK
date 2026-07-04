@@ -82,8 +82,12 @@ bool xemu_settings_load_gamepad_mapping(const char *guid,
 // Reset controller mapping to default settings.
 void xemu_settings_reset_controller_mapping(const char *guid);
 
-// Reset keyboard mappings to default settings.
+// Reset controller keyboard mappings to default settings.
 void xemu_settings_reset_keyboard_mapping(void);
+
+
+// Reset Steel Battalion keyboard mappings to default settings.
+void xemu_settings_reset_sbc_keyboard_mapping(void);
 
 #ifdef __cplusplus
 }

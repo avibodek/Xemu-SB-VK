@@ -29,14 +29,20 @@
 #include <stdbool.h>
 
 #include "qemu/queue.h"
+#include "hw/usb-passthrough.h"
 #include "xemu-settings.h"
 #include <SDL3/SDL.h>
 
 #define DRIVER_DUKE "usb-xbox-gamepad"
 #define DRIVER_S "usb-xbox-gamepad-s"
+#define DRIVER_STEEL_BATTALION "usb-steel-battalion"
+#define DRIVER_USB_PASSTHROUGH "usb-passthrough" // Not a real driver
 
 #define DRIVER_DUKE_DISPLAY_NAME "Xbox Controller"
 #define DRIVER_S_DISPLAY_NAME "Xbox Controller S"
+#define DRIVER_STEEL_BATTALION_DISPLAY_NAME "Steel Battalion Controller"
+#define DRIVER_USB_PASSTHROUGH_DISPLAY_NAME "USB Passthrough"
+
 
 enum controller_state_buttons_mask {
     CONTROLLER_BUTTON_A          = (1 << 0),
@@ -58,6 +64,64 @@ enum controller_state_buttons_mask {
 
 #define CONTROLLER_STATE_BUTTON_ID_TO_MASK(x) (1<<x)
 
+enum steel_battalion_controller_state_buttons_mask {
+    SBC_BUTTON_MAIN_WEAPON = 0x01,
+    SBC_BUTTON_SUB_WEAPON = 0x02,
+    SBC_BUTTON_LOCK_ON = 0x04,
+    SBC_BUTTON_EJECT = 0x08,
+    SBC_BUTTON_COCKPIT_HATCH = 0x10,
+    SBC_BUTTON_IGNITION = 0x20,
+    SBC_BUTTON_START = 0x40,
+    SBC_BUTTON_OPEN_CLOSE = 0x80,
+    SBC_BUTTON_MAP_ZOOM_IN_OUT = 0x100,
+    SBC_BUTTON_MODE_SELECT = 0x200,
+    SBC_BUTTON_SUB_MONITOR_MODE_SELECT = 0x400,
+    SBC_BUTTON_ZOOM_IN = 0x800,
+    SBC_BUTTON_ZOOM_OUT = 0x1000,
+    SBC_BUTTON_FSS = 0x2000,
+    SBC_BUTTON_MANIPULATOR = 0x4000,
+    SBC_BUTTON_LINE_COLOR_CHANGE = 0x8000,
+    SBC_BUTTON_WASHING = 0x10000,
+    SBC_BUTTON_EXTINGUISHER = 0x20000,
+    SBC_BUTTON_CHAFF = 0x40000,
+    SBC_BUTTON_TANK_DETACH = 0x80000,
+    SBC_BUTTON_OVERRIDE = 0x100000,
+    SBC_BUTTON_NIGHT_SCOPE = 0x200000,
+    SBC_BUTTON_FUNC1 = 0x400000,
+    SBC_BUTTON_FUNC2 = 0x800000,
+    SBC_BUTTON_FUNC3 = 0x1000000,
+    SBC_BUTTON_MAIN_WEAPON_CONTROL = 0x2000000,
+    SBC_BUTTON_SUB_WEAPON_CONTROL = 0x4000000,
+    SBC_BUTTON_MAGAZINE_CHANGE = 0x8000000,
+    SBC_BUTTON_COM1 = 0x10000000,
+    SBC_BUTTON_COM2 = 0x20000000,
+    SBC_BUTTON_COM3 = 0x40000000,
+    SBC_BUTTON_COM4 = 0x80000000
+};
+
+#define SBC_BUTTON_COM5 \
+    0x100000000ULL // These last 7 buttons are in bMoreButtons
+#define SBC_BUTTON_SIGHT_CHANGE 0x200000000ULL
+#define SBC_BUTTON_FILT_CONTROL_SYSTEM 0x400000000ULL
+#define SBC_BUTTON_OXYGEN_SUPPLY_SYSTEM 0x800000000ULL
+#define SBC_BUTTON_FUEL_FLOW_RATE 0x1000000000ULL
+#define SBC_BUTTON_BUFFER_MATERIAL 0x2000000000ULL
+#define SBC_BUTTON_VT_LOCATION_MEASUREMENT 0x4000000000ULL
+#define SBC_BUTTON_GEAR_UP 0x8000000000ULL
+#define SBC_BUTTON_GEAR_DOWN 0x10000000000ULL
+#define SBC_BUTTON_TUNER_LEFT 0x20000000000ULL
+#define SBC_BUTTON_TUNER_RIGHT 0x40000000000ULL
+
+enum controller_analog_button_index {
+    CONTROLLER_ANALOG_BTN_A,
+    CONTROLLER_ANALOG_BTN_B,
+    CONTROLLER_ANALOG_BTN_X,
+    CONTROLLER_ANALOG_BTN_Y,
+    CONTROLLER_ANALOG_BTN_BLACK,
+    CONTROLLER_ANALOG_BTN_WHITE,
+    CONTROLLER_ANALOG_BTN__COUNT
+};
+
 enum controller_state_axis_index {
     CONTROLLER_AXIS_LTRIG,
     CONTROLLER_AXIS_RTRIG,
@@ -67,6 +131,24 @@ enum controller_state_axis_index {
     CONTROLLER_AXIS_RSTICK_Y,
     CONTROLLER_AXIS__COUNT,
 };
+
+enum steel_battalion_state_axis_index {
+    SBC_AXIS_AIMING_X,
+    SBC_AXIS_AIMING_Y,
+    SBC_AXIS_ROTATION_LEVER,
+    SBC_AXIS_LEFT_PEDAL,
+    SBC_AXIS_MIDDLE_PEDAL,
+    SBC_AXIS_RIGHT_PEDAL,
+    SBC_AXIS_SIGHT_CHANGE_X,
+    SBC_AXIS_SIGHT_CHANGE_Y,
+    SBC_AXIS__COUNT
+};
+
+#ifdef __cplusplus
+using GamepadMappings = struct config::input::gamepad_mappings;
+#else
+typedef struct gamepad_mappings GamepadMappings;
+#endif
 
 enum controller_input_device_type {
     INPUT_DEVICE_SDL_KEYBOARD,
@@ -80,22 +162,38 @@ typedef struct XmuState {
     void *dev;
 } XmuState;
 
+typedef struct GamepadState {
+    // Input state
+    uint16_t buttons;
+    uint8_t analog_buttons[CONTROLLER_ANALOG_BTN__COUNT];
+    int16_t  axis[CONTROLLER_AXIS__COUNT];
+
+    // Rendering state hacked on here for convenience but needs to be moved
+    // (FIXME)
+    uint32_t animate_guide_button_end;
+    uint32_t animate_trigger_end;
+
+    // Rumble state
+    uint16_t rumble_l, rumble_r;
+} GamepadState;
+
+typedef struct SteelBattalionState {
+    uint64_t buttons;
+    uint64_t previousButtons;
+    uint16_t axis[SBC_AXIS__COUNT];
+    uint8_t gearLever;
+    uint8_t tunerDial;
+    uint8_t toggleSwitches;
+} SteelBattalionState;
+
 typedef struct ControllerState {
     QTAILQ_ENTRY(ControllerState) entry;
 
     int64_t last_input_updated_ts;
     int64_t last_rumble_updated_ts;
 
-    // Input state
-    uint16_t buttons;
-    int16_t  axis[CONTROLLER_AXIS__COUNT];
-
-    // Rendering state hacked on here for convenience but needs to be moved (FIXME)
-    uint32_t animate_guide_button_end;
-    uint32_t animate_trigger_end;
-
-    // Rumble state
-    uint16_t rumble_l, rumble_r;
+    GamepadState gp;
+    SteelBattalionState sbc;
 
     enum controller_input_device_type type;
     const char         *name;
@@ -108,9 +206,10 @@ typedef struct ControllerState {
     void *peripherals[2];
 
     GamepadMappings *controller_map;
-
+    GamepadMappings *sbc_controller_map;
     int   bound;  // Which port this input device is bound to
     void *device; // DeviceState opaque
+	
 } ControllerState;
 
 typedef QTAILQ_HEAD(, ControllerState) ControllerStateList;
@@ -123,6 +222,8 @@ extern "C" {
 #endif
 
 extern int *g_keyboard_scancode_map[25];
+extern int *g_keyboard_sbc_scancode_map[49];
+
 
 void xemu_input_init(void);
 void xemu_input_process_sdl_events(const SDL_Event *event); // SDL_EVENT_GAMEPAD_ADDED, SDL_EVENT_GAMEPAD_REMOVED
@@ -132,7 +233,9 @@ void xemu_input_update_sdl_kbd_controller_state(ControllerState *state);
 void xemu_input_update_sdl_controller_state(ControllerState *state);
 void xemu_input_update_rumble(ControllerState *state);
 ControllerState *xemu_input_get_bound(int index);
+LibusbDevice *xemu_input_get_bound_device(int index);
 void xemu_input_bind(int index, ControllerState *state, int save);
+void xemu_input_bind_passthrough(int index, LibusbDevice *device, int save);
 bool xemu_input_bind_xmu(int player_index, int peripheral_port_index,
                          const char *filename, bool is_rebind);
 void xemu_input_rebind_xmu(int port);
@@ -141,10 +244,13 @@ int xemu_input_get_controller_default_bind_port(ControllerState *state, int star
 void xemu_save_peripheral_settings(int player_index, int peripheral_index,
                                    int peripheral_type,
                                    const char *peripheral_parameter);
+int xemu_input_get_libusb_device_default_bind_port(LibusbDevice *device, int start);
 
 void xemu_input_set_test_mode(int enabled);
 int xemu_input_get_test_mode(void);
 void xemu_input_reset_input_mapping(ControllerState *state);
+void xemu_input_reset_sbc_mapping(ControllerState *state);
+
 
 #ifdef __cplusplus
 }

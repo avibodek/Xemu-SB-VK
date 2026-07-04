@@ -62,6 +62,8 @@ public:
     void Draw() override;
     void Hide() override;
     void PopulateTableController(ControllerState *state);
+	void PopulateTableSBC(ControllerState *state);
+
 };
 
 class MainMenuDisplayView : public virtual MainMenuTabView

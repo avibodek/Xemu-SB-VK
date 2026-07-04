@@ -200,6 +200,12 @@ void MainMenuInputView::Draw()
         driver = DRIVER_DUKE_DISPLAY_NAME;
     else if (strcmp(driver, DRIVER_S) == 0)
         driver = DRIVER_S_DISPLAY_NAME;
+    else if (strcmp(driver, DRIVER_STEEL_BATTALION) == 0)
+        driver = DRIVER_STEEL_BATTALION_DISPLAY_NAME;
+#ifdef CONFIG_USB_LIBUSB
+    else if(strcmp(driver, DRIVER_USB_PASSTHROUGH) == 0)
+        driver = DRIVER_USB_PASSTHROUGH_DISPLAY_NAME;
+#endif
 
     ImGui::Columns(2, "", false);
     ImGui::SetColumnWidth(0, ImGui::GetWindowWidth()*0.25);
@@ -211,9 +217,22 @@ void MainMenuInputView::Draw()
     ImGui::SetNextItemWidth(-FLT_MIN);
     if (ImGui::BeginCombo("###InputDrivers", driver,
                           ImGuiComboFlags_NoArrowButton)) {
-        const char *available_drivers[] = { DRIVER_DUKE, DRIVER_S };
-        const char *driver_display_names[] = { DRIVER_DUKE_DISPLAY_NAME,
-                                               DRIVER_S_DISPLAY_NAME };
+        const char *available_drivers[] = { 
+            DRIVER_DUKE, 
+            DRIVER_S,
+            DRIVER_STEEL_BATTALION,
+#ifdef CONFIG_USB_LIBUSB
+            DRIVER_USB_PASSTHROUGH
+#endif
+        };
+        const char *driver_display_names[] = { 
+            DRIVER_DUKE_DISPLAY_NAME, 
+            DRIVER_S_DISPLAY_NAME, 
+            DRIVER_STEEL_BATTALION_DISPLAY_NAME,
+#ifdef CONFIG_USB_LIBUSB
+            DRIVER_USB_PASSTHROUGH_DISPLAY_NAME
+#endif
+        };
         bool is_selected = false;
         int num_drivers = sizeof(driver_display_names) / sizeof(driver_display_names[0]);
         for (int i = 0; i < num_drivers; i++) {
@@ -225,7 +244,12 @@ void MainMenuInputView::Draw()
                     if (iter == driver_display_names[j])
                         bound_drivers[active] = available_drivers[j];
                 }
-                xemu_input_bind(active, bound_controllers[active], 1);
+                if(strcmp(bound_drivers[active], DRIVER_USB_PASSTHROUGH) == 0) {
+                    xemu_input_bind(active, NULL, 1);
+                } else {
+                    xemu_input_bind_passthrough(active, NULL, 1);
+                    xemu_input_bind(active, bound_controllers[active], 1); // Just in case we're switching from one driver to another and not back from USB passthrough
+                }
             }
             if (is_selected) {
                 ImGui::SetItemDefaultFocus();
@@ -250,22 +274,26 @@ void MainMenuInputView::Draw()
     // List available input devices
     const char *not_connected = "Not Connected";
     ControllerState *bound_state = xemu_input_get_bound(active);
+    LibusbDevice *bound_device = xemu_input_get_bound_device(active);
 
     // Get current controller name
     const char *name;
-    if (bound_state == NULL) {
-        name = not_connected;
-    } else {
+    if (bound_state != NULL) {
         name = bound_state->name;
+    } else if(bound_device != NULL) {
+        name = bound_device->name;
+    } else {
+        name = not_connected;
     }
 
     ImGui::SetNextItemWidth(-FLT_MIN);
     if (ImGui::BeginCombo("###InputDevices", name, ImGuiComboFlags_NoArrowButton))
     {
         // Handle "Not connected"
-        bool is_selected = bound_state == NULL;
+        bool is_selected = bound_state == NULL && bound_device == NULL;
         if (ImGui::Selectable(not_connected, is_selected)) {
             xemu_input_bind(active, NULL, 1);
+            xemu_input_bind_passthrough(active, NULL, 1);
             bound_state = NULL;
         }
         if (is_selected) {
@@ -273,34 +301,60 @@ void MainMenuInputView::Draw()
         }
 
         // Handle all available input devices
-        ControllerState *iter;
-        QTAILQ_FOREACH(iter, &available_controllers, entry) {
-            is_selected = bound_state == iter;
-            ImGui::PushID(iter);
-            const char *selectable_label = iter->name;
-            char buf[128];
-            if (iter->bound >= 0) {
-                snprintf(buf, sizeof(buf), "%s (Port %d)", iter->name, iter->bound+1);
-                selectable_label = buf;
+        if(strcmp(bound_drivers[active], DRIVER_USB_PASSTHROUGH) == 0) {
+            LibusbDevice *iter;
+            QTAILQ_FOREACH(iter, &available_libusb_devices, entry) {
+                is_selected = bound_device == iter;
+                ImGui::PushID(iter);
+                const char *selectable_label = iter->name;
+                char buf[128];
+                if (iter->bound >= 0) {
+                    snprintf(buf, sizeof(buf), "%s (Port %d)", iter->name, iter->bound+1);
+                    selectable_label = buf;
+                }
+                if (ImGui::Selectable(selectable_label, is_selected)) {
+                    if(bound_state != NULL)
+                        xemu_input_bind(active, NULL, 1);
+                    xemu_input_bind_passthrough(active, iter, 1);
+                    bound_device = iter;
+                }
+                if (is_selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+                ImGui::PopID();
             }
-            if (ImGui::Selectable(selectable_label, is_selected)) {
-                xemu_input_bind(active, iter, 1);
+         } else {
+            ControllerState *iter;
+            QTAILQ_FOREACH(iter, &available_controllers, entry) {
+                is_selected = bound_state == iter;
+                ImGui::PushID(iter);
+                const char *selectable_label = iter->name;
+                char buf[128];
+                if (iter->bound >= 0) {
+                    snprintf(buf, sizeof(buf), "%s (Port %d)", iter->name, iter->bound+1);
+                    selectable_label = buf;
+                }
+                if (ImGui::Selectable(selectable_label, is_selected)) {
+                    if(bound_device != NULL)
+                        xemu_input_bind_passthrough(active, NULL, 1);
+                    xemu_input_bind(active, iter, 1);
 
-                // FIXME: We want to bind the XMU here, but we can't because we
-                // just unbound it and we need to wait for Qemu to release the
-                // file
+                    // FIXME: We want to bind the XMU here, but we can't because we
+                    // just unbound it and we need to wait for Qemu to release the
+                    // file
 
-                // If we previously had no controller connected, we can rebind
-                // the XMU
-                if (bound_state == NULL)
-                    xemu_input_rebind_xmu(active);
+                    // If we previously had no controller connected, we can rebind
+                    // the XMU
+                    if (bound_state == NULL)
+                        xemu_input_rebind_xmu(active);
 
-                bound_state = iter;
+                    bound_state = iter;
+                }
+                if (is_selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+                ImGui::PopID();
             }
-            if (is_selected) {
-                ImGui::SetItemDefaultFocus();
-            }
-            ImGui::PopID();
         }
 
         ImGui::EndCombo();
@@ -322,6 +376,9 @@ void MainMenuInputView::Draw()
     if (bound_state) {
         device_selected = true;
         RenderController(0, 0, 0x81dc8a00, 0x0f0f0f00, bound_state);
+    } else if (bound_device) {
+        device_selected = true;
+        RenderController(bound_device);
     } else {
         static ControllerState state{};
         RenderController(0, 0, 0x1f1f1f00, 0x0f0f0f00, &state);
@@ -350,11 +407,21 @@ void MainMenuInputView::Draw()
         ImVec2(controller_width/t_w, 0));
     ImVec2 pos = ImGui::GetCursorPos();
     if (!device_selected) {
-        const char *msg = "Please select an available input device";
-        ImVec2 dim = ImGui::CalcTextSize(msg);
-        ImGui::SetCursorPosX(cur.x + (controller_display_size.x-dim.x)/2);
-        ImGui::SetCursorPosY(cur.y + (controller_display_size.y-dim.y)/2);
-        ImGui::Text("%s", msg);
+        if(bound_device) {
+            RenderController(bound_device);
+
+            const char *msg = "USB Passthrough devices can't be displayed";
+            ImVec2 dim = ImGui::CalcTextSize(msg);
+            ImGui::SetCursorPosX(cur.x + (controller_display_size.x-dim.x)/2);
+            ImGui::SetCursorPosY(cur.y + (controller_display_size.y-dim.y)/2);
+            ImGui::Text("%s", msg);
+        } else {
+            const char *msg = "Please select an available input device";
+            ImVec2 dim = ImGui::CalcTextSize(msg);
+            ImGui::SetCursorPosX(cur.x + (controller_display_size.x-dim.x)/2);
+            ImGui::SetCursorPosY(cur.y + (controller_display_size.y-dim.y)/2);
+            ImGui::Text("%s", msg);
+        }
     }
 
     controller_fbo->Restore();
@@ -364,15 +431,18 @@ void MainMenuInputView::Draw()
 
     if (bound_state) {
         ImGui::PushID(active);
+        bool hasInternalHub =
+            strcmp(bound_drivers[active], DRIVER_STEEL_BATTALION) != 0;
+        if (hasInternalHub) {
+            SectionTitle("Expansion Slots");
+            // Begin a 2-column layout to render the expansion slots
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,
+                                g_viewport_mgr.Scale(ImVec2(0, 12)));
+            ImGui::Columns(2, "mixed", false);
 
-        SectionTitle("Expansion Slots");
-        // Begin a 2-column layout to render the expansion slots
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,
-                            g_viewport_mgr.Scale(ImVec2(0, 12)));
-        ImGui::Columns(2, "mixed", false);
+            xmu_fbo->Target();
+            id = (ImTextureID)(intptr_t)xmu_fbo->Texture();
 
-        xmu_fbo->Target();
-        id = (ImTextureID)(intptr_t)xmu_fbo->Texture();
 
         static const SDL_DialogFileFilter img_file_filters[] = {
             { ".img Files", "img" },
@@ -397,86 +467,87 @@ void MainMenuInputView::Draw()
                     ImGui::PushID(j);
                     const char *selectable_label = peripheral_type_names[j];
 
-                    if (ImGui::Selectable(selectable_label, is_selected)) {
-                        // Free any existing peripheral
-                        if (bound_state->peripherals[i] != NULL) {
-                            if (bound_state->peripheral_types[i] ==
-                                PERIPHERAL_XMU) {
-                                // Another peripheral was already bound.
-                                // Unplugging
-                                xemu_input_unbind_xmu(active, i);
+                        if (ImGui::Selectable(selectable_label, is_selected)) {
+                            // Free any existing peripheral
+                            if (bound_state->peripherals[i] != NULL) {
+                                if (bound_state->peripheral_types[i] ==
+                                    PERIPHERAL_XMU) {
+                                    // Another peripheral was already bound.
+                                    // Unplugging
+                                    xemu_input_unbind_xmu(active, i);
+                                }
+
+                                // Free the existing state
+                                g_free((void *)bound_state->peripherals[i]);
+                                bound_state->peripherals[i] = NULL;
                             }
 
-                            // Free the existing state
-                            g_free((void *)bound_state->peripherals[i]);
-                            bound_state->peripherals[i] = NULL;
+                            // Change the peripheral type to the newly selected type
+                            bound_state->peripheral_types[i] =
+                                (enum peripheral_type)j;
+
+                            // Allocate state for the new peripheral
+                            if (j == PERIPHERAL_XMU) {
+                                bound_state->peripherals[i] =
+                                    g_malloc(sizeof(XmuState));
+                                memset(bound_state->peripherals[i], 0,
+                                    sizeof(XmuState));
+                            }
+
+                            xemu_save_peripheral_settings(
+                                active, i, bound_state->peripheral_types[i], NULL);
                         }
 
-                        // Change the peripheral type to the newly selected type
-                        bound_state->peripheral_types[i] =
-                            (enum peripheral_type)j;
-
-                        // Allocate state for the new peripheral
-                        if (j == PERIPHERAL_XMU) {
-                            bound_state->peripherals[i] =
-                                g_malloc(sizeof(XmuState));
-                            memset(bound_state->peripherals[i], 0,
-                                   sizeof(XmuState));
+                        if (is_selected) {
+                            ImGui::SetItemDefaultFocus();
                         }
 
-                        xemu_save_peripheral_settings(
-                            active, i, bound_state->peripheral_types[i], NULL);
+                        ImGui::PopID();
                     }
 
-                    if (is_selected) {
-                        ImGui::SetItemDefaultFocus();
-                    }
-
-                    ImGui::PopID();
+                    ImGui::EndCombo();
                 }
+                DrawComboChevron();
 
-                ImGui::EndCombo();
-            }
-            DrawComboChevron();
-
-            // Set an X offset to center the image button within the column
-            ImGui::SetCursorPosX(
-                ImGui::GetCursorPosX() +
-                (int)((ImGui::GetColumnWidth() -
-                       xmu_w * g_viewport_mgr.m_scale -
-                       2 * port_padding * g_viewport_mgr.m_scale) /
-                      2));
-
-            selected_type = bound_state->peripheral_types[i];
-            if (selected_type == PERIPHERAL_XMU) {
-                float x = xmu_x + i * xmu_x_stride;
-                float y = xmu_y;
-
-                XmuState *xmu = (XmuState *)bound_state->peripherals[i];
-                if (xmu->filename != NULL && strlen(xmu->filename) > 0) {
-                    RenderXmu(x, y, 0x81dc8a00, 0x0f0f0f00);
-
-                } else {
-                    RenderXmu(x, y, 0x1f1f1f00, 0x0f0f0f00);
-                }
-
-                ImVec2 xmu_display_size;
-                if (ImGui::GetContentRegionMax().x <
-                    xmu_h * g_viewport_mgr.m_scale) {
-                    xmu_display_size.x = ImGui::GetContentRegionMax().x / 2;
-                    xmu_display_size.y = xmu_display_size.x * xmu_h / xmu_w;
-                } else {
-                    xmu_display_size = ImVec2(xmu_w * g_viewport_mgr.m_scale,
-                                              xmu_h * g_viewport_mgr.m_scale);
-                }
-
+                // Set an X offset to center the image button within the column
                 ImGui::SetCursorPosX(
                     ImGui::GetCursorPosX() +
-                    (int)((ImGui::GetColumnWidth() - xmu_display_size.x) /
-                          2.0));
+                    (int)((ImGui::GetColumnWidth() -
+                        xmu_w * g_viewport_mgr.m_scale -
+                        2 * port_padding * g_viewport_mgr.m_scale) /
+                        2));
 
-                ImGui::Image(id, xmu_display_size, ImVec2(0.5f * i, 1),
-                             ImVec2(0.5f * (i + 1), 0));
+                selected_type = bound_state->peripheral_types[i];
+                if (selected_type == PERIPHERAL_XMU) {
+                    float x = xmu_x + i * xmu_x_stride;
+                    float y = xmu_y;
+
+                    XmuState *xmu = (XmuState *)bound_state->peripherals[i];
+                    if (xmu->filename != NULL && strlen(xmu->filename) > 0) {
+                        RenderXmu(x, y, 0x81dc8a00, 0x0f0f0f00);
+
+                    } else {
+                        RenderXmu(x, y, 0x1f1f1f00, 0x0f0f0f00);
+                    }
+
+                    ImVec2 xmu_display_size;
+                    if (ImGui::GetContentRegionMax().x <
+                        xmu_h * g_viewport_mgr.m_scale) {
+                        xmu_display_size.x = ImGui::GetContentRegionMax().x / 2;
+                        xmu_display_size.y = xmu_display_size.x * xmu_h / xmu_w;
+                    } else {
+                        xmu_display_size = ImVec2(xmu_w * g_viewport_mgr.m_scale,
+                                                xmu_h * g_viewport_mgr.m_scale);
+                    }
+
+                    ImGui::SetCursorPosX(
+                        ImGui::GetCursorPosX() +
+                        (int)((ImGui::GetColumnWidth() - xmu_display_size.x) /
+                            2.0));
+
+                    ImGui::Image(id, xmu_display_size, ImVec2(0.5f * i, 1),
+                                ImVec2(0.5f * (i + 1), 0));
+
 
                 // Button to generate a new XMU
                 ImGui::PushID(i);
@@ -508,26 +579,27 @@ void MainMenuInputView::Draw()
                                }
                            });
 
-                ImGui::PopID();
+                    ImGui::PopID();
+                }
+
+                ImGui::NextColumn();
             }
 
-            ImGui::NextColumn();
+            xmu_fbo->Restore();
+
+            ImGui::PopStyleVar(); // ItemSpacing
+            ImGui::Columns(1);
         }
-
-        xmu_fbo->Restore();
-
-        ImGui::PopStyleVar(); // ItemSpacing
-        ImGui::Columns(1);
 
         SectionTitle("Mapping");
         ImVec4 tc = ImGui::GetStyle().Colors[ImGuiCol_Header];
         tc.w = 0.0f;
         ImGui::PushStyleColor(ImGuiCol_Header, tc);
 
-        if (ImGui::CollapsingHeader("Input Mapping")) {
+        if (ImGui::CollapsingHeader("Gamepad Input Mapping")) {
             float p = ImGui::GetFrameHeight() * 0.3;
             ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(p, p));
-            if (ImGui::BeginTable("input_remap_tbl", 2,
+            if (ImGui::BeginTable("gamepad_input_remap_tbl", 2,
                                   ImGuiTableFlags_RowBg |
                                       ImGuiTableFlags_Borders)) {
                 ImGui::TableSetupColumn("Emulated Input");
@@ -540,6 +612,13 @@ void MainMenuInputView::Draw()
             }
             ImGui::PopStyleVar();
         }
+		
+		    if (ImGui::Button("01Reset to Default")) {
+            xemu_input_reset_input_mapping(bound_state);
+			ImGui::PopID();
+        }
+		
+		
 
         if (bound_state->type == INPUT_DEVICE_SDL_GAMEPAD) {
             Toggle("Enable Rumble",
@@ -557,11 +636,28 @@ void MainMenuInputView::Draw()
                    &bound_state->controller_map->controller_mapping
                         .invert_axis_right_y);
         }
+		
+		if (ImGui::CollapsingHeader("Steel Battalion Controller Input Mapping")) {
+            float p = ImGui::GetFrameHeight() * 0.3;
+            ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(p, p));
+            if (ImGui::BeginTable("sbc_input_remap_tbl", 2,
+                                  ImGuiTableFlags_RowBg |
+                                      ImGuiTableFlags_Borders)) {
+                ImGui::TableSetupColumn("Emulated Input");
+                ImGui::TableSetupColumn("Host Input");
+                ImGui::TableHeadersRow();
 
-        if (ImGui::Button("Reset to Default")) {
-            xemu_input_reset_input_mapping(bound_state);
+                PopulateTableSBC(bound_state);
+
+                ImGui::EndTable();
+            }
+            ImGui::PopStyleVar();
         }
 
+        if (ImGui::Button("02Reset to Default")) {
+            xemu_input_reset_sbc_mapping(bound_state);
+			ImGui::PopID();
+        }
         ImGui::PopStyleColor();
         ImGui::PopID();
     }
@@ -735,7 +831,228 @@ void MainMenuInputView::PopulateTableController(ControllerState *state)
         }
         ImGui::PopID();
     }
-}
+}//end of PopulateTableController
+
+
+void MainMenuInputView::PopulateTableSBC(ControllerState *state)
+{
+    if (!state)
+        return;
+
+    // Must match g_keyboard_sbc_scancode_map and the controller
+    // button map below.
+    static constexpr const char *sbc_button_index_to_name_map[40] = {
+		   "eject",
+		   "cockpit_hatch",
+           "ignition",
+           "start",
+           "open_close", 
+		   "map_zoom_in_out", 
+           "mode_select",
+           "sub_monitor_mode_select",
+           "zoom_in",
+           "zoom_out", 
+           "fss",
+           "manipulator", 
+           "line_color_change",
+           "washing",
+           "extinguisher", 
+           "chaff",
+           "tank_detach", 
+           "override",
+           "night_scope",
+           "func1", 
+           "func2",
+           "func3",
+           "main_weapon_control",
+           "sub_weapon_control",
+           "magazine_change",
+           "com1", 
+           "com2",            
+           "com3",
+           "com4",
+           "com5",
+           "sight_change",
+           "filt_control_system",
+           "oxygen_supply_system",
+           "fuel_flow_rate", 
+           "buffer_material",
+           "vt_location_measurement",
+           "gear_up",
+           "gear_down",
+           "tuner_left",
+           "tuner_right",//40
+    };//end sbc_buttons
+	
+	
+	
+	
+
+    // Must match keyboard_sbc_scancode_map[40:]. Each axis requires
+    // two keys for the positive and negative direction with the
+    // exception of the triggers, which only require one each.
+	
+    static constexpr const char *sbc_keyboard_stick_index_to_name_map[9] = {
+           "sight_change_up",
+           "sight_change_down",
+           "sight_change_left",
+           "sight_change_right",
+           "rotation_left",
+           "rotation_right",
+           "left_pedal",
+           "right_pedal",            
+           "middle_pedal", 
+    };
+
+    // Must match controller axis map below.
+    static constexpr const char *sbc_axis_index_to_name_map[6] = {
+        "Sight Change Axis Y",
+        "Sight Change Axis X",
+        "Rotation Axis",
+        "Left Pedal Axis",
+        "Right Pedal Axis",
+        "Middle Pedal Axis",
+    };
+
+    bool is_keyboard = state->type == INPUT_DEVICE_SDL_KEYBOARD;
+
+    int num_axis_mappings;
+    const char *const *axis_index_to_name_map;
+    if (is_keyboard) {
+      num_axis_mappings = std::size(sbc_keyboard_stick_index_to_name_map);
+      axis_index_to_name_map = sbc_keyboard_stick_index_to_name_map;
+    }
+	else {
+      num_axis_mappings = std::size(sbc_axis_index_to_name_map);
+      axis_index_to_name_map = sbc_axis_index_to_name_map;
+    }
+    constexpr int num_sbc_buttons = std::size(sbc_button_index_to_name_map);
+    const int table_rows = num_axis_mappings + num_sbc_buttons;
+    for (int i = 0; i < table_rows; ++i) {
+        ImGui::TableNextRow();
+
+        // Button/Axis Name Column
+        ImGui::TableSetColumnIndex(0);
+
+        if (i < num_sbc_buttons) {
+          ImGui::Text("%s", sbc_button_index_to_name_map[i]);
+        } else {
+			ImGui::Text("%s", axis_index_to_name_map[i - num_sbc_buttons]);
+        }
+
+        // Button Binding Column
+        ImGui::TableSetColumnIndex(1);
+
+        if (m_rebinding && m_rebinding->GetTableRow() == i) {
+            ImGui::Text("Press a key to rebind");
+            continue;
+        }
+
+        const char *remap_button_text = "Invalid";
+        if (is_keyboard) {
+          //g_keyboard_sbc_scancode_map includes both face buttons and axis buttons.
+            int keycode = *(g_keyboard_sbc_scancode_map[i]);
+            if (keycode != SDL_SCANCODE_UNKNOWN) {
+                remap_button_text =
+                    SDL_GetScancodeName(static_cast<SDL_Scancode>(keycode));
+            }
+        } else if (i < num_sbc_buttons) {
+                int *button_map[num_sbc_buttons] = {
+		  &state->sbc_controller_map->steel_battalion_mapping.eject,
+          &state->sbc_controller_map->steel_battalion_mapping.cockpit_hatch,
+          &state->sbc_controller_map->steel_battalion_mapping.ignition,
+          &state->sbc_controller_map->steel_battalion_mapping.start,
+          &state->sbc_controller_map->steel_battalion_mapping.open_close, 
+          &state->sbc_controller_map->steel_battalion_mapping.map_zoom_in_out, 
+          &state->sbc_controller_map->steel_battalion_mapping.mode_select,
+          &state->sbc_controller_map->steel_battalion_mapping.sub_monitor_mode_select,
+          &state->sbc_controller_map->steel_battalion_mapping.zoom_in,
+          &state->sbc_controller_map->steel_battalion_mapping.zoom_out, 
+          &state->sbc_controller_map->steel_battalion_mapping.fss,
+          &state->sbc_controller_map->steel_battalion_mapping.manipulator, 
+          &state->sbc_controller_map->steel_battalion_mapping.line_color_change,
+          &state->sbc_controller_map->steel_battalion_mapping.washing,
+          &state->sbc_controller_map->steel_battalion_mapping.extinguisher, 
+          &state->sbc_controller_map->steel_battalion_mapping.chaff,
+          &state->sbc_controller_map->steel_battalion_mapping.tank_detach, 
+          &state->sbc_controller_map->steel_battalion_mapping.override,
+          &state->sbc_controller_map->steel_battalion_mapping.night_scope,
+          &state->sbc_controller_map->steel_battalion_mapping.func1, 
+          &state->sbc_controller_map->steel_battalion_mapping.func2,
+          &state->sbc_controller_map->steel_battalion_mapping.func3,
+          &state->sbc_controller_map->steel_battalion_mapping.main_weapon_control,
+          &state->sbc_controller_map->steel_battalion_mapping.sub_weapon_control,
+          &state->sbc_controller_map->steel_battalion_mapping.magazine_change,
+          &state->sbc_controller_map->steel_battalion_mapping.com1, 
+          &state->sbc_controller_map->steel_battalion_mapping.com2,            
+          &state->sbc_controller_map->steel_battalion_mapping.com3,
+          &state->sbc_controller_map->steel_battalion_mapping.com4,
+          &state->sbc_controller_map->steel_battalion_mapping.com5,
+          &state->sbc_controller_map->steel_battalion_mapping.sight_change,
+          &state->sbc_controller_map->steel_battalion_mapping.filt_control_system,
+          &state->sbc_controller_map->steel_battalion_mapping.oxygen_supply_system,
+          &state->sbc_controller_map->steel_battalion_mapping.fuel_flow_rate, 
+          &state->sbc_controller_map->steel_battalion_mapping.buffer_material,
+          &state->sbc_controller_map->steel_battalion_mapping.vt_location_measurement,
+          &state->sbc_controller_map->steel_battalion_mapping.gear_up,
+          &state->sbc_controller_map->steel_battalion_mapping.gear_down,
+          &state->sbc_controller_map->steel_battalion_mapping.tuner_left,
+          &state->sbc_controller_map->steel_battalion_mapping.tuner_right,
+                };
+
+                int button = *(button_map[i]);
+                if (button != SDL_GAMEPAD_BUTTON_INVALID) {
+                    remap_button_text = SDL_GetGamepadStringForButton(
+                        static_cast<SDL_GamepadButton>(button));
+                }
+        } else {
+          int *axis_map[6] = {
+/* 		&state->sbc_controller_map->steel_battalion_mapping.sight_change_up,
+          &state->sbc_controller_map->steel_battalion_mapping.sight_change_down,
+          &state->sbc_controller_map->steel_battalion_mapping.sight_change_left,
+          &state->sbc_controller_map->steel_battalion_mapping.sight_change_right,
+          &state->sbc_controller_map->steel_battalion_mapping.rotation_left,
+          &state->sbc_controller_map->steel_battalion_mapping.rotation_right,
+          &state->sbc_controller_map->steel_battalion_mapping.left_pedal,
+          &state->sbc_controller_map->steel_battalion_mapping.right_pedal,            
+          &state->sbc_controller_map->steel_battalion_mapping.middle_pedal,  */
+			  
+          &state->sbc_controller_map->steel_battalion_mapping.sight_change_y,
+          &state->sbc_controller_map->steel_battalion_mapping.sight_change_x,
+          &state->sbc_controller_map->steel_battalion_mapping.rotation_axis,
+          &state->sbc_controller_map->steel_battalion_mapping.left_pedal_axis,
+          &state->sbc_controller_map->steel_battalion_mapping.right_pedal_axis,            
+          &state->sbc_controller_map->steel_battalion_mapping.middle_pedal_axis, 
+          };
+          int axis = *(axis_map[i - num_sbc_buttons]);
+          if (axis != SDL_GAMEPAD_AXIS_INVALID) {
+            remap_button_text = SDL_GetGamepadStringForAxis(
+                static_cast<SDL_GamepadAxis>(axis));
+          }
+        }
+
+        ImGui::PushID(i);
+        float tw = ImGui::CalcTextSize(remap_button_text).x;
+        auto &style = ImGui::GetStyle();
+        float max_button_width =
+          tw + g_viewport_mgr.m_scale * 2 * style.FramePadding.x;
+
+        float min_button_width = ImGui::GetColumnWidth(1) / 2;
+        float button_width = std::max(min_button_width, max_button_width);
+
+        if (ImGui::Button(remap_button_text, ImVec2(button_width, 0))) {
+          if (is_keyboard) {
+            m_rebinding =
+              std::make_unique<SBCKeyboardRebindingMap>(i);
+          } else {
+            m_rebinding =
+              std::make_unique<SBCRebindingMap>(i,
+                  state);
+          }
+        }
+        ImGui::PopID();
+    }
+}//end of PopulateTableSBC
 
 void MainMenuDisplayView::Draw()
 {
