@@ -1,0 +1,45 @@
+../ui/xui/gl-helpers.cc:826:6: warning: no previous prototype for function 'RenderSteelBattalionController' [-Wmissing-prototypes]
+  826 | void RenderSteelBattalionController(float frame_x, float frame_y, uint32_t primary_color,
+      |      ^
+../ui/xui/gl-helpers.cc:826:1: note: declare 'static' if the function is not intended to be used outside of this translation unit
+  826 | void RenderSteelBattalionController(float frame_x, float frame_y, uint32_t primary_color,
+      | ^
+      | static 
+../ui/xui/gl-helpers.cc:954:12: warning: left operand of comma operator has no effect [-Wunused-value]
+  954 |     }else{(g_decal_shader, (int)(c_x + w / 2.0f + 23.0f * lstick_x),
+      |            ^~~~~~~~~~~~~~
+../ui/xui/gl-helpers.cc:954:28: warning: left operand of comma operator has no effect [-Wunused-value]
+  954 |     }else{(g_decal_shader, (int)(c_x + w / 2.0f + 23.0f * lstick_x),
+      |                            ^    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../ui/xui/gl-helpers.cc:955:17: warning: left operand of comma operator has no effect [-Wunused-value]
+  955 |                 (int)(c_y - h / 2.0f), w, h, sb_tex_items[obj_left_stick].x,
+      |                 ^    ~~~~~~~~~~~~~~~~
+../ui/xui/gl-helpers.cc:955:40: warning: left operand of comma operator has no effect [-Wunused-value]
+  955 |                 (int)(c_y - h / 2.0f), w, h, sb_tex_items[obj_left_stick].x,
+      |                                        ^
+../ui/xui/gl-helpers.cc:955:43: warning: left operand of comma operator has no effect [-Wunused-value]
+  955 |                 (int)(c_y - h / 2.0f), w, h, sb_tex_items[obj_left_stick].x,
+      |                                           ^
+../ui/xui/gl-helpers.cc:955:75: warning: left operand of comma operator has no effect [-Wunused-value]
+  955 |                 (int)(c_y - h / 2.0f), w, h, sb_tex_items[obj_left_stick].x,
+      |                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^
+../ui/xui/gl-helpers.cc:956:46: warning: left operand of comma operator has no effect [-Wunused-value]
+  956 |                 sb_tex_items[obj_left_stick].y, w, h, primary_color,
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^
+../ui/xui/gl-helpers.cc:956:49: warning: left operand of comma operator has no effect [-Wunused-value]
+  956 |                 sb_tex_items[obj_left_stick].y, w, h, primary_color,
+      |                                                 ^
+../ui/xui/gl-helpers.cc:956:52: warning: left operand of comma operator has no effect [-Wunused-value]
+  956 |                 sb_tex_items[obj_left_stick].y, w, h, primary_color,
+      |                                                    ^
+../ui/xui/gl-helpers.cc:956:55: warning: left operand of comma operator has no effect [-Wunused-value]
+  956 |                 sb_tex_items[obj_left_stick].y, w, h, primary_color,
+      |                                                       ^~~~~~~~~~~~~
+../ui/xui/gl-helpers.cc:957:17: warning: left operand of comma operator has no effect [-Wunused-value]
+  957 |                 secondary_color, 0);
+      |                 ^~~~~~~~~~~~~~~
+../ui/xui/gl-helpers.cc:1149:43: warning: suggest braces around initialization of subobject [-Wmissing-braces]
+ 1149 |     static ControllerState fake_state = { 0 };
+      |                                           ^
+      |                                           {}
+13 warnings generated.

@@ -610,6 +610,7 @@ void MainMenuInputView::Draw()
                 PopulateTableController(bound_state);
 
                 ImGui::EndTable();
+
             }
             ImGui::PopStyleVar();
         }
@@ -648,15 +649,15 @@ void MainMenuInputView::Draw()
                 ImGui::TableSetupColumn("Host Input");
                 ImGui::TableHeadersRow();
 
-                PopulateTableSBC(bound_state);
-
                 ImGui::EndTable();
             }
             ImGui::PopStyleVar();
+
         }
 
         if (ImGui::Button("02Reset to Default")) {
             xemu_input_reset_sbc_mapping(bound_state);
+//check
 		//	ImGui::PopID();
         }
         ImGui::PopStyleColor();
@@ -664,8 +665,8 @@ void MainMenuInputView::Draw()
     }
 
     SectionTitle("Options");
-	Toggle("Disable Hotkeys", &g_config.input.hotkeys,
-           "Turns off single button hotkeys");
+	Toggle("Enable Hotkeys", &g_config.input.hotkeys,
+           "Turns on/off single button hotkeys");
     Toggle("Auto-bind controllers", &g_config.input.auto_bind,
            "Bind newly connected controllers to any open port");
     Toggle("Background controller input capture",
@@ -1114,11 +1115,11 @@ void MainMenuDisplayView::Draw()
 
     SectionTitle("Interface");
     Toggle("Show main menu bar", &g_config.display.ui.show_menubar,
-           "Show main menu");
+           "Show main menu. Hotkey CTRL+M");
     Toggle("Show notifications", &g_config.display.ui.show_notifications,
            "Display notifications in upper-right corner");
     Toggle("Hide mouse cursor", &g_config.display.ui.hide_cursor,
-           "Hide the mouse cursor always");
+           "Hide the mouse cursor always. Hotkey: CTRL+C");
 
     int ui_scale_idx;
     if (g_config.display.ui.auto_scale) {

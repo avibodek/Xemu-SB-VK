@@ -925,9 +925,26 @@ void RenderSteelBattalionController(float frame_x, float frame_y, uint32_t prima
     float c_y = frame_y + sight_change_ctr.y;
     float scstick_x = (float)state->sbc.axis[SBC_AXIS_SIGHT_CHANGE_X] / 32768.0;
     float scstick_y = (float)state->sbc.axis[SBC_AXIS_SIGHT_CHANGE_Y] / 32768.0;
+
+    //Fixed: now shows full axis movement of sight change
+    int positionX; 
+    int positionY; 
+
+if (scstick_x < 1){
+    positionX = (int)(c_x - w / 2.0f + 5.0f * scstick_x);
+}
+else{
+    positionX = (int)(c_x - w / 2.0f - 5.0f * scstick_x);
+}
+if (scstick_y < 1){
+    positionY = (int)(c_y - h / 2.0f - 5.0f * scstick_y);
+}
+else{
+    positionY = (int)(c_y - h / 2.0f + 5.0f * scstick_y);
+}
     RenderDecal(
-        g_decal_shader, (int)(c_x - w / 2.0f + 5.0f * scstick_x),
-        (int)(c_y - h / 2.0f - 5.0f * scstick_y), w, h,
+        g_decal_shader, positionX,
+        positionY, w, h,
         sb_tex_items[obj_sight_change_stick].x,
         sb_tex_items[obj_sight_change_stick].y, w, h,
         (state->sbc.buttons & SBC_BUTTON_SIGHT_CHANGE) ? secondary_color :
@@ -942,10 +959,20 @@ void RenderSteelBattalionController(float frame_x, float frame_y, uint32_t prima
     c_x = frame_x + lstick_ctr.x;
     c_y = frame_y + lstick_ctr.y;
     float lstick_x = (float)state->sbc.axis[SBC_AXIS_ROTATION_LEVER] / 32768.0;
+    
+    //Fixed, now shows left and right movement of the left joystick
+    if(lstick_x < 1){
+    //right
     RenderDecal(g_decal_shader, (int)(c_x - w / 2.0f + 23.0f * lstick_x),
                 (int)(c_y - h / 2.0f), w, h, sb_tex_items[obj_left_stick].x,
                 sb_tex_items[obj_left_stick].y, w, h, primary_color,
                 secondary_color, 0);
+    //left
+    }else{ RenderDecal(g_decal_shader, (int)(c_x - w / 2.0f - 23.0f * lstick_x),
+                (int)(c_y - h / 2.0f), w, h, sb_tex_items[obj_left_stick].x,
+                sb_tex_items[obj_left_stick].y, w, h, primary_color,
+                secondary_color, 0);
+    }
 
     // Render right joystick
     w = sb_tex_items[obj_right_stick].w;
@@ -1042,71 +1069,75 @@ void RenderSteelBattalionController(float frame_x, float frame_y, uint32_t prima
                 sb_tex_items[obj_transmission_lever].y, w, h, primary_color,
                 secondary_color, 0);
 
-    // Filter Control System
+    //Toggle: Filter Control System
     w = sb_tex_items[obj_toggle].w;
     h = sb_tex_items[obj_toggle].h;
     c_x = frame_x + filt_ctrl_sys_ctr.x;
     c_y = frame_y + filt_ctrl_sys_ctr.y;
     if (state->sbc.toggleSwitches & (SBC_BUTTON_FILT_CONTROL_SYSTEM >> 32)) {
-        c_x -= 3;
-        c_y += 4;
+        c_x -= 8;
+        c_y += 9;
     }
     RenderDecal(g_decal_shader, (int)(c_x - w / 2.0f), (int)(c_y - h / 2.0f), w,
                 h, sb_tex_items[obj_toggle].x, sb_tex_items[obj_toggle].y, w, h,
                 primary_color, secondary_color, 0);
 
-    // Oxygen Supply System
+    //Toggle: Oxygen Supply System
     w = sb_tex_items[obj_toggle].w;
     h = sb_tex_items[obj_toggle].h;
     c_x = frame_x + oxygen_supply_system_ctr.x;
     c_y = frame_y + oxygen_supply_system_ctr.y;
     if (state->sbc.toggleSwitches & (SBC_BUTTON_OXYGEN_SUPPLY_SYSTEM >> 32)) {
-        c_x -= 3;
-        c_y += 4;
+        c_x -= 8;
+        c_y += 9;
+        RenderDecal(g_decal_shader, (int)(c_x - w / 2.0f), (int)(c_y - h / 2.0f), w,
+                h, sb_tex_items[obj_toggle].x, sb_tex_items[obj_toggle].y, w, h,
+                primary_color, secondary_color, 0);
     }
     RenderDecal(g_decal_shader, (int)(c_x - w / 2.0f), (int)(c_y - h / 2.0f), w,
                 h, sb_tex_items[obj_toggle].x, sb_tex_items[obj_toggle].y, w, h,
                 primary_color, secondary_color, 0);
 
-    // Fuel Flow Rate
+    //Toggle: Fuel Flow Rate
     w = sb_tex_items[obj_toggle].w;
     h = sb_tex_items[obj_toggle].h;
     c_x = frame_x + fuel_flow_rate_ctr.x;
     c_y = frame_y + fuel_flow_rate_ctr.y;
     if (state->sbc.toggleSwitches & (SBC_BUTTON_FUEL_FLOW_RATE >> 32)) {
-        c_x -= 3;
-        c_y += 4;
+        c_x -= 8;
+        c_y += 9;
     }
     RenderDecal(g_decal_shader, (int)(c_x - w / 2.0f), (int)(c_y - h / 2.0f), w,
                 h, sb_tex_items[obj_toggle].x, sb_tex_items[obj_toggle].y, w, h,
                 primary_color, secondary_color, 0);
 
-    // Buffer Material
+    //Toggle: Buffer Material
     w = sb_tex_items[obj_toggle].w;
     h = sb_tex_items[obj_toggle].h;
     c_x = frame_x + buffer_material_ctr.x;
     c_y = frame_y + buffer_material_ctr.y;
     if (state->sbc.toggleSwitches & (SBC_BUTTON_BUFFER_MATERIAL >> 32)) {
-        c_x -= 3;
-        c_y += 4;
+        c_x -= 8;
+        c_y += 9;
     }
     RenderDecal(g_decal_shader, (int)(c_x - w / 2.0f), (int)(c_y - h / 2.0f), w,
                 h, sb_tex_items[obj_toggle].x, sb_tex_items[obj_toggle].y, w, h,
                 primary_color, secondary_color, 0);
 
-    // VT Location Measurement
+    //Toggle: VT Location Measurement
     w = sb_tex_items[obj_toggle].w;
     h = sb_tex_items[obj_toggle].h;
     c_x = frame_x + vt_location_measurement_ctr.x;
     c_y = frame_y + vt_location_measurement_ctr.y;
     if (state->sbc.toggleSwitches &
         (SBC_BUTTON_VT_LOCATION_MEASUREMENT >> 32)) {
-        c_x -= 3;
-        c_y += 4;
+        c_x -= 8;//3
+        c_y += 9;//4
     }
     RenderDecal(g_decal_shader, (int)(c_x - w / 2.0f), (int)(c_y - h / 2.0f), w,
                 h, sb_tex_items[obj_toggle].x, sb_tex_items[obj_toggle].y, w, h,
                 primary_color, secondary_color, 0);
+
 
     glBlendFunc(GL_ONE,
                 GL_ZERO); // Don't blend, just overwrite values in buffer
