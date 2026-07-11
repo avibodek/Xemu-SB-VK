@@ -670,6 +670,8 @@ void MainMenuInputView::Draw()
     Toggle("Background controller input capture",
            &g_config.input.background_input_capture,
            "Capture even if window is unfocused (requires restart)");
+    Toggle("Disable Fullscreen Toggle", &g_config.input.disable_doubleclick,
+           "Prevents double clicking from toggling fullscreen");
 	Toggle("Disable Single Button Hotkeys",
            &g_config.input.disable_hotkeys,
            "Disable hotkeys that may interfere with keyboard controls");
