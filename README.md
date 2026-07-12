@@ -7,9 +7,9 @@ This project is part of my Steel Battalion Newcomer guide which focuses on the c
 
 **Features**
 * Option to turn On/Off hotkeys
-* Removes double click toggling fullscreen
+* Option to turn On/Off click toggling fullscreen
 * New Hotkeys for Displaying/Hiding menu and cursor
-* Fully rebindable keyboard keys for Steel Battalion within the emulator
+* Fully rebindable keyboard keys for Steel Battalion within the emulator (requires restart for now)
 * Minor fixes such as Steel Battalion Controller Graphic Display Improvements
 
 **To Do**
@@ -28,7 +28,8 @@ This project is part of my Steel Battalion Newcomer guide which focuses on the c
 List here
 
 # How to Build
-Build in linux of WSL, be sure to install podman or docker.
+Build in linux of WSL, be sure to install podman or docker. You must be in the directory with the build folder to build.
+You may substitude Xemu-SB-VK or Xemu-SB-NVK with any directory name you want. The default directory will be "xemu" otherwise.
 
 **Building Vulkan** 
 Clone with:
