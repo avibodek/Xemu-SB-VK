@@ -65,7 +65,7 @@ Run with:
 
 `    ./dist/xemu`
 
-## Building Non-Vulkan (for windows)
+## Building Non-Vulkan (for Windows)
 
 Clone with:
 
@@ -101,6 +101,10 @@ Run with:
 
 ## Other helpful links
 
-https://github.com/Ryzee119/ogx360_t4/
+* https://github.com/Ryzee119/ogx360_t4/
 
+* https://github.com/SantiagoSaldana/SBC
 
+* https://github.com/faha223/XboxPeripheralLibusbTools/
+
+* https://xemu.app/docs/dev/building-from-source/
